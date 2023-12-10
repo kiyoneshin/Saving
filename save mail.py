@@ -41,7 +41,7 @@ def download_email(uid, client_socket):
     return email_content
 
 def process_multipart(mime_header, mime_body):
-    # TODO: Thực hiện xử lý cho các phần multipart
+    #Thực hiện xử lý cho các phần multipart
     msg = BytesParser(policy=policy.default).parsebytes(mime_body.encode())
     for part in msg.iter_parts():
         content_type = part.get_content_type()
@@ -51,7 +51,7 @@ def process_multipart(mime_header, mime_body):
             process_attachment(part)
 
 def process_text_plain(mime_body):
-    # TODO: Thực hiện xử lý cho phần text/plain
+    #Thực hiện xử lý cho phần text/plain
     print("Text/Plain Content:")
     print(mime_body)
 
@@ -65,7 +65,7 @@ def process_attachment(part):
     filename = part.get_filename()
     if filename:
         print(f"Found attachment: {filename}")
-        # TODO: Lưu tệp đính kèm xuống máy cục bộ của client
+        # Lưu tệp đính kèm xuống máy cục bộ của client
         with open(filename, 'wb') as attachment_file:
             attachment_file.write(part.get_payload(decode=True))
 
