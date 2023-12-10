@@ -1,4 +1,13 @@
+import socket
+import os
+import base64
+import ssl
+import re
 
+# Cấu hình
+POP3_SERVER = "pop.example.com"
+POP3_PORT = 995
+USERNAME = "your_email@example.com"
 PASSWORD = "your_email_password"
 DOWNLOAD_PATH = "downloaded_emails"
 
@@ -13,8 +22,54 @@ def write_uid_list(uid_list):
     with open('uid_list.txt', 'w') as file:
         file.write('\n'.join(uid_list))
 
-def decode_base64(data):
-    return base64.b64decode(data).decode('utf-8')
+def extract_headers_and_body(mime_msg):
+    header_end = mime_msg.find('\r\n\r\n')
+    if header_end != -1:
+        headers = mime_msg[:header_end]
+        body = mime_msg[header_end + 4:]
+        return headers, body
+    else:
+        return None, None
+
+def get_content_type(headers):
+    content_type_match = re.search(r'Content-Type: (.+?)(;|$)', headers, re.IGNORECASE)
+    if content_type_match:
+        return content_type_match.group(1).strip()
+    else:
+        return None
+
+def process_part_without_email_lib(part, uid):
+    headers, body = extract_headers_and_body(part)
+
+    if headers and body:
+        content_type = get_content_type(headers)
+
+        if content_type and content_type.startswith("text"):
+            content = body.decode('utf-8')
+            print(f"Text content:\n{content}")
+        elif content_type and content_type.startswith("multipart"):
+            process_multipart_without_email_lib(body, uid)
+        elif content_type and content_type.startswith("image"):
+            filename = f'{uid}_image.jpg'
+            with open(filename, 'wb') as image_file:
+                image_file.write(body)
+            print(f"Saved image: {filename}")
+        elif content_type and content_type.startswith("application"):
+            filename = f'{uid}_attachment.bin'
+            with open(filename, 'wb') as attachment_file:
+                attachment_file.write(body)
+            print(f"Saved attachment: {filename}")
+        else:
+            print("Unsupported content type")
+
+def process_multipart_without_email_lib(multipart_data, uid):
+    boundary_match = re.search(r'boundary=(.+)', multipart_data, re.IGNORECASE)
+    if boundary_match:
+        boundary = boundary_match.group(1)
+        parts = re.split(f'--{boundary}', multipart_data)[1:-1]
+
+        for part in parts:
+            process_part_without_email_lib(part, uid)
 
 def download_email(uid, client_socket):
     client_socket.sendall(f'RETR {uid}\r\n'.encode())
@@ -30,89 +85,51 @@ def download_email(uid, client_socket):
 
     return email_content
 
-def save_attachment(attachment_data, filename):
-    with open(filename, 'wb') as attachment_file:
-        attachment_file.write(base64.b64decode(attachment_data))
+def process_mime_without_email_lib(email_content, uid):
+    mime_headers, mime_body = extract_headers_and_body(email_content)
 
-def process_multipart(multipart_data, uid):
-    boundary = multipart_data.get_content_type().split("=")[-1]
-    parts = multipart_data.get_payload()
+    if mime_headers and mime_body:
+        content_type = get_content_type(mime_headers)
 
-    for part in parts:
-        process_part(part, uid)
-
-def process_part(part, uid):
-    content_type = part.get_content_type()
-    content_disposition = part.get("Content-Disposition")
-
-    if content_type.startswith("text"):
-        # Xử lý phần văn bản
-        content = part.get_payload(decode=True).decode('utf-8')
-        print(f"Text content:\n{content}")
-    elif content_disposition and content_disposition.startswith("attachment"):
-        # Xử lý phần đính kèm
-        filename = part.get_filename()
-        if filename:
-            filename = f'{uid}_{filename}'
-            save_attachment(part.get_payload(), filename)
-            print(f"Saved attachment: {filename}")
-    elif content_type.startswith("multipart"):
-        # Xử lý phần multipart (đệ quy)
-        process_multipart(part, uid)
-
-def process_mime(email_content, uid):
-    lines = email_content.split('\r\n')
-
-    # Tìm dòng bắt đầu của phần MIME
-    start_index = None
-    for i, line in enumerate(lines):
-        if line.startswith("--"):
-            start_index = i
-            break
-
-    if start_index is not None:
-        # Xử lý từ dòng bắt đầu của phần MIME
-        mime_data = '\r\n'.join(lines[start_index:])
-        msg_start = email_content.find(mime_data)
-        mime_msg = email_content[msg_start:]
-
-        # Phân tích MIME message
-        message = email.message_from_string(mime_msg)
-
-        # Xử lý từng phần trong message
-        for part in message.walk():
-            process_part(part, uid)
+        if content_type and content_type.startswith("multipart"):
+            process_multipart_without_email_lib(mime_body, uid)
+        else:
+            process_part_without_email_lib(email_content, uid)
     else:
-        # Nếu không tìm thấy dòng bắt đầu của phần MIME, xử lý nội dung trực tiếp
-        process_part(email.message_from_string(email_content), uid)
-
-def get_uid_list(response):
-    lines = response.splitlines()[1:]
-    return [uid.split()[0] for uid in lines]
-
-def get_uid_from_response(response):
-    lines = response.splitlines()
-    if lines[0].startswith(b'+OK'):
-        return lines[1].split()[0].decode('utf-8')
-    else:
-        return None
+        print("Invalid MIME format")
 
 def main():
+    # Kết nối đến Mail Server qua SSL
+    context = ssl.create_default_context()
+    client_socket = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname=POP3_SERVER)
+    client_socket.connect((POP3_SERVER, POP3_PORT))
+    response = client_socket.recv(1024).decode()
+    print(response)
+
+    # Xác thực đăng nhập
+    client_socket.sendall(f'USER {USERNAME}\r\n'.encode())
+    response = client_socket.recv(1024).decode()
+    print(response)
+
+    client_socket.sendall(f'PASS {PASSWORD}\r\n'.encode())
+    response = client_socket.recv(1024).decode()
+    print(response)
+
     downloaded_uids = read_uid_list()
 
     # Lấy danh sách UID
     client_socket.sendall(b'UIDL\r\n')
-    response = client_socket.recv(1024).decode()
+    response = client_socket.recv(4096).decode()
     uid_list_response = response.splitlines()[1:]
     print(uid_list_response)
 
     for uid_response in uid_list_response:
-        uid = get_uid_from_response(uid_response)
-        if uid and uid not in downloaded_uids:
+        uid = uid_response.split()[0]
+        if uid not in downloaded_uids:
             email_content = download_email(uid, client_socket)
 
             # Xử lý MIME để trích xuất nội dung và đính kèm
-            process_mime(email_content, uid)
+            process_mime_without_email_lib(email_content, uid)
 
             # Ghi nội dung email vào tệp
             file_path = os.path.join(DOWNLOAD_PATH, f'email_{uid}.txt')
@@ -129,3 +146,5 @@ def main():
 
     client_socket.close()
 
+if __name__ == "__main__":
+    main()
