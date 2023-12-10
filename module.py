@@ -1,12 +1,4 @@
-import socket
-import os
-import base64
-import ssl
 
-# Cấu hình
-POP3_SERVER = "pop.example.com"
-POP3_PORT = 995
-USERNAME = "your_email@example.com"
 PASSWORD = "your_email_password"
 DOWNLOAD_PATH = "downloaded_emails"
 
@@ -106,22 +98,6 @@ def get_uid_from_response(response):
         return None
 
 def main():
-    # Kết nối đến Mail Server qua SSL
-    context = ssl.create_default_context()
-    client_socket = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname=POP3_SERVER)
-    client_socket.connect((POP3_SERVER, POP3_PORT))
-    response = client_socket.recv(1024).decode()
-    print(response)
-
-    # Xác thực đăng nhập
-    client_socket.sendall(f'USER {USERNAME}\r\n'.encode())
-    response = client_socket.recv(1024).decode()
-    print(response)
-
-    client_socket.sendall(f'PASS {PASSWORD}\r\n'.encode())
-    response = client_socket.recv(1024).decode()
-    print(response)
-
     downloaded_uids = read_uid_list()
 
     # Lấy danh sách UID
@@ -153,5 +129,3 @@ def main():
 
     client_socket.close()
 
-if __name__ == "__main__":
-    main()
