@@ -12,6 +12,16 @@ IMPORTANT_FOLDER = 'Important'
 WORK_FOLDER = 'Work'
 SPAM_FOLDER = 'Spam'
 
+# Quy tắc lọc
+FILTER_RULES = {
+    'Project': ['ahihi@testing.com', 'ahuu@testing.com'],
+    'Important': ['urgent', 'ASAP'],
+    'Work': ['report', 'meeting'],
+}
+
+# Từ khóa spam
+SPAM_KEYWORDS = ['virus', 'hack', 'crack']
+
 def read_uid_list():
     uid_list = set()
     if os.path.exists('uid_list.txt'):
@@ -42,16 +52,11 @@ def move_to_folder(uid, client_socket, folder):
     print(f"Email with UID {uid} is moved to {folder} folder.")
 
 def apply_filters(uid, email_content, client_socket):
-    if 'project@first.com' in email_content or 'project@second.com' in email_content:
-        move_to_folder(uid, client_socket, PROJECT_FOLDER)
+    for folder, keywords in FILTER_RULES.items():
+        if any(keyword.lower() in email_content.lower() for keyword in keywords):
+            move_to_folder(uid, client_socket, folder)
 
-    if 'keyword' in email_content.lower() or 'asap' in email_content.lower():
-        move_to_folder(uid, client_socket, IMPORTANT_FOLDER)
-
-    if 'report' in email_content.lower() or 'meeting' in email_content.lower():
-        move_to_folder(uid, client_socket, WORK_FOLDER)
-
-    if 'virus' in email_content.lower() or 'hack' in email_content.lower() or 'crack' in email_content.lower():
+    if any(keyword.lower() in email_content.lower() for keyword in SPAM_KEYWORDS):
         move_to_folder(uid, client_socket, SPAM_FOLDER)
 
 def main():
