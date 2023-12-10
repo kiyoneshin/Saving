@@ -1,115 +1,117 @@
-﻿import socket
-import json
+import socket
 import os
-import email
-import ssl
-from email.parser import BytesParser
-from email.policy import default
 
-
-
-# with open('config.json', 'r') as file:
-#     config = json.load(file)
-
-# SMTP_SERVER = config.get('SMTP', 'server')
-# SMTP_PORT = config.get('SMTP', 'port')
-# POP3_SERVER = config.get('POP3', 'server')
-# POP3_PORT = config.get('POP3', 'port')
-# USERNAME = config.get('Account', 'username')
-# PASSWORD = config.get('Account', 'password')
-
-POP3_SERVER = "pop.example.com"
+# Thông tin cấu hình
+POP3_SERVER = 'pop.example.com'
 POP3_PORT = 995
-USERNAME = "your_email@example.com"
-PASSWORD = "your_email_password"
+USERNAME = 'your_email@example.com'
+PASSWORD = 'your_email_password'
+DOWNLOAD_PATH = 'downloaded_emails'
+SPAM_FOLDER = 'spam_emails'
 
-# Hàm để đọc danh sách UID từ tệp
-def read_uid_list():
-    uid_list = set()
-    if os.path.exists('uid_list.txt'):
-        with open('uid_list.txt', 'r') as file:
-            uid_list = set(file.read().splitlines())
-    return uid_list
-
-# Hàm để ghi danh sách UID vào tệp
-def write_uid_list(uid_list):
-    with open('uid_list.txt', 'w') as file:
-        file.write('\n'.join(uid_list))
+def create_spam_folder():
+    if not os.path.exists(SPAM_FOLDER):
+        os.makedirs(SPAM_FOLDER)
+        print("Thu muc Spam da duoc tao")
+        
 
 
+# Tạo thư mục để lưu trữ email tải về và thư mục Spam
+if not os.path.exists(DOWNLOAD_PATH):
+    os.makedirs(DOWNLOAD_PATH)
+if not os.path.exists(SPAM_FOLDER):
+    os.makedirs(SPAM_FOLDER)
 
-# Kết nối đến Mail Server
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    ip_address = socket.gethostbyname(POP3_SERVER)
-    print(f"The IP address of {POP3_SERVER} is {ip_address}")
-except socket.gaierror as e:
-    print(f"Error resolving {POP3_SERVER}: {e}")
+def download_email(uid, client_socket):
+    # Gửi lệnh để tải nội dung email theo UID
+    client_socket.sendall(f'RETR {uid}\r\n'.encode())
 
-# Xác thực đăng nhập
-client_socket.sendall(f'USER {USERNAME}\r\n'.encode())
-response = client_socket.recv(1024).decode()
-print(response)
+    # Nhận phản hồi từ server
+    response = client_socket.recv(1024).decode()
+    print(response)
 
-client_socket.sendall(f'PASS {PASSWORD}\r\n'.encode())
-response = client_socket.recv(1024).decode()
-print(response)
+    # Đọc dữ liệu từ server và lưu vào tệp
+    email_content = b''
+    while True:
+        data = client_socket.recv(1024)
+        if not data:
+            break
+        email_content += data
 
-# Đọc danh sách UID đã tải trước đó
-downloaded_uids = read_uid_list()
+    # Lưu nội dung email vào tệp
+    file_path = os.path.join(DOWNLOAD_PATH, f'email_{uid}.txt')
+    with open(file_path, 'wb') as email_file:
+        email_file.write(email_content)
 
-# Lấy số lượng email và danh sách UID
-client_socket.sendall(b'STAT\r\n')
-response = client_socket.recv(1024).decode()
-print(response)
+    return file_path
 
-client_socket.sendall(b'UIDL\r\n')
-response = client_socket.recv(1024).decode()
-uid_list_response = response.splitlines()[1:]  # Bỏ qua dòng đầu tiên chứa thông tin số lượng email
-print(uid_list_response)
+def move_to_spam(uid, client_socket):
+    client_socket.sendall(f'DELE {uid}\r\n'.encode())
+    response =client_socket.recv(1024).decode()
+    print(response)
+    
+    file_path = os.path.join(DOWNLOAD_PATH, f'email_{uid}.txt')
+    spam_file_path = os.path.join(SPAM_FOLDER, f'spam_email.{uid}.txt')
+    
+    with open(file_path, 'r', encoding = 'utf-8') as original_email:
+        email_content = original_email.read()
+    with open(spam_file_path, 'w', encoding = 'utf-8') as spam_email:
+        spam_email.write(email_content)
+        
+    os.remove(file_path)
+    print(f"Email voi UID {uid} da duoc chuyen toi thu muc Spam.")
 
-# Lặp qua danh sách UID và tải những email chưa tải
-for uid_response in uid_list_response:
-    uid = uid_response.split()[0]
-    if uid not in downloaded_uids:
-        # Tải nội dung của email
-        client_socket.sendall(f'RETR {uid}\r\n'.encode())
-        email_content = client_socket.recv(4096).decode()  # Đọc nội dung email
+def main():
+    # Kết nối đến Mail Server
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((POP3_SERVER, POP3_PORT))
 
-        # Phân tích cú pháp email để lấy thông tin về tiêu đề và nội dung
-        msg = BytesParser(policy=default).parsebytes(email_content.encode())
-        subject = msg.get("Subject", "")
-        body = ""
+    # Nhận phản hồi từ server khi kết nối
+    response = client_socket.recv(1024).decode()
+    print(response)
 
-        for part in msg.iter_parts():
-            if part.is_multipart():
-                # Nếu là multipart, lấy phần text/plain
-                for subpart in part.iter_parts():
-                    if subpart.get_content_type() == "text/plain":
-                        body += subpart.get_payload()
-            elif part.get_content_type() == "text/plain":
-                # Nếu là text/plain
-                body += part.get_payload()
+    # Xác thực đăng nhập
+    client_socket.sendall(f'USER {USERNAME}\r\n'.encode())
+    response = client_socket.recv(1024).decode()
+    print(response)
 
-        # Kiểm tra từ khóa spam trong tiêu đề và nội dung
-        spam_keywords = ["viagra", "lottery", "free money"]  # Thêm các từ khóa spam khác vào đây
-        is_spam = any(keyword.lower() in subject.lower() or keyword.lower() in body.lower() for keyword in spam_keywords)
+    client_socket.sendall(f'PASS {PASSWORD}\r\n'.encode())
+    response = client_socket.recv(1024).decode()
+    print(response)
 
-        # Di chuyển email vào thư mục Spam nếu là spam
-        if is_spam:
-            # Thực hiện logic để di chuyển email vào thư mục Spam
-            print(f"Email with UID {uid} is marked as spam. Moving to Spam folder.")
-            # Đặt logic di chuyển email vào thư mục Spam ở đây
+    # Lấy danh sách UID
+    client_socket.sendall(b'UIDL\r\n')
+    response = client_socket.recv(1024).decode()
+    uid_list_response = response.splitlines()[1:]  # Bỏ qua dòng đầu tiên chứa thông tin số lượng email
+    print(uid_list_response)
 
-        # Ghi UID vào danh sách đã tải
-        downloaded_uids.add(uid)
+    # Lặp qua danh sách UID và xử lý email
+    for uid_response in uid_list_response:
+        uid = uid_response.split()[0]
 
-# Ghi danh sách UID đã tải vào tệp
-write_uid_list(downloaded_uids)
+        # Kiểm tra xem email đã được tải trước đó hay chưa
+        if not os.path.exists(os.path.join(DOWNLOAD_PATH, f'email_{uid}.txt')):
+            file_path = download_email(uid, client_socket)
+            with open(file_path, 'r', encoding='utf-8') as email_file:
+                email_content = email_file.read()
+                if 'sender@gmail.com' in email_content:
+                    move_to_spam(uid, client_socket)
+                    print(f"Email voi UID {uid} da duoc di chuyen toi Spam dua tren nguoi gui")
+                if 'spam' in email_content.lower():
+                    move_to_spam(uid, client_socket)
+                    print(f"Email voi UID {uid} da duoc di chuyen toi Spam dua tren chu de(Subject)")
+                if'spam_content' in email_content.lower():
+                    move_to_spam(uid, client_socket)
+                    print(f"Email voi UID {uid} da duoc di chuyen toi Spam dua tren noi dung")
+    
 
-# Đóng kết nối
-client_socket.sendall(b'QUIT\r\n')
-response = client_socket.recv(1024).decode()
-print(response)
+    # Đóng kết nối
+    client_socket.sendall(b'QUIT\r\n')
+    response = client_socket.recv(1024).decode()
+    print(response)
 
-client_socket.close()
+    client_socket.close()
+
+if __name__ == "__main__":
+    create_spam_folder()
+    main()
