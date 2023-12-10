@@ -42,10 +42,10 @@ def move_to_folder(uid, client_socket, folder):
     print(f"Email with UID {uid} is moved to {folder} folder.")
 
 def apply_filters(uid, email_content, client_socket):
-    if 'ahihi@testing.com' in email_content or 'ahuu@testing.com' in email_content:
+    if 'project@first.com' in email_content or 'project@second.com' in email_content:
         move_to_folder(uid, client_socket, PROJECT_FOLDER)
 
-    if 'urgent' in email_content.lower() or 'asap' in email_content.lower():
+    if 'keyword' in email_content.lower() or 'asap' in email_content.lower():
         move_to_folder(uid, client_socket, IMPORTANT_FOLDER)
 
     if 'report' in email_content.lower() or 'meeting' in email_content.lower():
