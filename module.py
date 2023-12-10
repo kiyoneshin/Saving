@@ -38,7 +38,7 @@ def get_content_type(headers):
     else:
         return None
 
-def process_part_without_email_lib(part, uid):
+def process_part(part, uid):
     headers, body = extract_headers_and_body(part)
 
     if headers and body:
@@ -59,33 +59,7 @@ def process_part_without_email_lib(part, uid):
             with open(filename, 'wb') as attachment_file:
                 attachment_file.write(body)
             print(f"Saved attachment: {filename}")
-        else:
-            print("Unsupported content type")
-
-def process_multipart_without_email_lib(multipart_data, uid):
-    boundary_match = re.search(r'boundary=(.+)', multipart_data, re.IGNORECASE)
-    if boundary_match:
-        boundary = boundary_match.group(1)
-        parts = re.split(f'--{boundary}', multipart_data)[1:-1]
-
-        for part in parts:
-            process_part_without_email_lib(part, uid)
-
-def download_email(uid, client_socket):
-    client_socket.sendall(f'RETR {uid}\r\n'.encode())
-    response = client_socket.recv(1024).decode()
-    print(response)
-
-    email_content = ''
-    while True:
-        data = client_socket.recv(4096).decode()
-        email_content += data
-        if data.endswith('\r\n.\r\n'):
-            break
-
-    return email_content
-
-def process_mime_without_email_lib(email_content, uid):
+     mime(email_content, uid):
     mime_headers, mime_body = extract_headers_and_body(email_content)
 
     if mime_headers and mime_body:
