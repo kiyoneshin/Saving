@@ -66,9 +66,9 @@ def process_part(part, uid):
         content_type = get_content_type(mime_headers)
 
         if content_type and content_type.startswith("multipart"):
-            process_multipart_without_email_lib(mime_body, uid)
+            process_multipart(mime_body, uid)
         else:
-            process_part_without_email_lib(email_content, uid)
+            process_part(email_content, uid)
     else:
         print("Invalid MIME format")
 
@@ -102,10 +102,10 @@ def main():
         if uid not in downloaded_uids:
             email_content = download_email(uid, client_socket)
 
-            # Xử lý MIME để trích xuất nội dung và đính kèm
-            process_mime_without_email_lib(email_content, uid)
+            
+            process_mime(email_content, uid)
 
-            # Ghi nội dung email vào tệp
+            
             file_path = os.path.join(DOWNLOAD_PATH, f'email_{uid}.txt')
             with open(file_path, 'w', encoding='utf-8') as email_file:
                 email_file.write(email_content)
