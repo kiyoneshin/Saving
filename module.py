@@ -38,7 +38,7 @@ def get_content_type(headers):
     else:
         return None
 
-def process_part(part, uid):
+def process_part (part, uid):
     headers, body = extract_headers_and_body(part)
 
     if headers and body:
@@ -48,7 +48,7 @@ def process_part(part, uid):
             content = body.decode('utf-8')
             print(f"Text content:\n{content}")
         elif content_type and content_type.startswith("multipart"):
-            process_multipart_without_email_lib(body, uid)
+            process_multipart (body, uid)
         elif content_type and content_type.startswith("image"):
             filename = f'{uid}_image.jpg'
             with open(filename, 'wb') as image_file:
@@ -59,7 +59,33 @@ def process_part(part, uid):
             with open(filename, 'wb') as attachment_file:
                 attachment_file.write(body)
             print(f"Saved attachment: {filename}")
-     mime(email_content, uid):
+        else:
+            print("Unsupported content type")
+
+def process_multipart (multipart_data, uid):
+    boundary_match = re.search(r'boundary=(.+)', multipart_data, re.IGNORECASE)
+    if boundary_match:
+        boundary = boundary_match.group(1)
+        parts = re.split(f'--{boundary}', multipart_data)[1:-1]
+
+        for part in parts:
+            process_part (part, uid)
+
+def download_email(uid, client_socket):
+    client_socket.sendall(f'RETR {uid}\r\n'.encode())
+    response = client_socket.recv(1024).decode()
+    print(response)
+
+    email_content = ''
+    while True:
+        data = client_socket.recv(4096).decode()
+        email_content += data
+        if data.endswith('\r\n.\r\n'):
+            break
+
+    return email_content
+
+def process_mime (email_content, uid):
     mime_headers, mime_body = extract_headers_and_body(email_content)
 
     if mime_headers and mime_body:
@@ -73,13 +99,6 @@ def process_part(part, uid):
         print("Invalid MIME format")
 
 def main():
-    # Kết nối đến Mail Server qua SSL
-    context = ssl.create_default_context()
-    client_socket = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname=POP3_SERVER)
-    client_socket.connect((POP3_SERVER, POP3_PORT))
-    response = client_socket.recv(1024).decode()
-    print(response)
-
     # Xác thực đăng nhập
     client_socket.sendall(f'USER {USERNAME}\r\n'.encode())
     response = client_socket.recv(1024).decode()
@@ -102,10 +121,9 @@ def main():
         if uid not in downloaded_uids:
             email_content = download_email(uid, client_socket)
 
-            
             process_mime(email_content, uid)
 
-            
+            # Ghi nội dung email vào tệp
             file_path = os.path.join(DOWNLOAD_PATH, f'email_{uid}.txt')
             with open(file_path, 'w', encoding='utf-8') as email_file:
                 email_file.write(email_content)
